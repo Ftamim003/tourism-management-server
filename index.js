@@ -32,6 +32,7 @@ async function run() {
 
     const guideCollection= client.db('TourismDB').collection('tourGuides')
     const packagesCollection=client.db('TourismDB').collection('tourPackages')
+    const storiesCollection=client.db('TourismDB').collection('touristStories')
     
     app.get('/tour-guides', async (req,res)=>{
         const result= await guideCollection.find().toArray()
@@ -54,8 +55,18 @@ async function run() {
         res.send(result);
     });
 
-
+    app.get('/stories/random', async (req, res) => {
+        const result = await storiesCollection.aggregate([{ $sample: { size: 4 } }]).toArray();
+        res.send(result);
+    });
     
+    app.get('/stories', async (req, res) => {
+        const result = await storiesCollection.find().toArray();
+        res.send(result);
+    });
+
+
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
