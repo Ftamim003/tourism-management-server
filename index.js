@@ -1,6 +1,6 @@
 const express = require('express');
 const app= express();
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const cors = require('cors');
 require('dotenv').config()
 const port =process.env.PORT || 5000;
@@ -33,6 +33,7 @@ async function run() {
     const guideCollection= client.db('TourismDB').collection('tourGuides')
     const packagesCollection=client.db('TourismDB').collection('tourPackages')
     const storiesCollection=client.db('TourismDB').collection('touristStories')
+    const bookingsCollection=client.db('TourismDB').collection('bookingInfo')
     
     app.get('/tour-guides', async (req,res)=>{
         const result= await guideCollection.find().toArray()
@@ -44,11 +45,18 @@ async function run() {
         res.send(result)
     })
 
+    app.get("/packages/:id", async (req, res) => {
+      const id  = req.params.id;
+      const query={ _id: new ObjectId(id) }
+      const result = await packagesCollection.findOne(query);
+      res.send(result);
+    });
 
     app.get('/random-packages', async (req, res) => {
         const result = await packagesCollection.aggregate([{ $sample: { size: 3 } }]).toArray();
         res.send(result);
     });
+
 
     app.get('/random-guides', async (req, res) => {
         const result = await guideCollection.aggregate([{ $sample: { size: 6 } }]).toArray();
@@ -64,6 +72,12 @@ async function run() {
         const result = await storiesCollection.find().toArray();
         res.send(result);
     });
+
+    app.post('/bookings', async(req,res)=>{
+      const info=req.body;
+      const result= await bookingsCollection.insertOne(info)
+      res.send(result)
+    })
 
 
 
