@@ -187,10 +187,31 @@ async function run() {
         res.send(result);
     });
     
-    app.get('/stories', async (req, res) => {
-        const result = await storiesCollection.find().toArray();
-        res.send(result);
-    });
+    app.get('/stories',async(req,res)=>{
+      const email=req.query.email;
+      const query = { email: email };
+      const result=await storiesCollection.find(query).toArray()
+      res.send(result);
+     });
+
+    // app.get('/stories', async (req, res) => {
+    //     const result = await storiesCollection.find().toArray();
+    //     res.send(result);
+    // });
+
+    app.post('/stories',async(req,res)=>{
+      const story=req.body;
+      const result= await storiesCollection.insertOne(story);
+      res.send(result);
+    })
+
+    app.delete('/stories/:id',async (req,res)=>{
+      const id=req.params.id;
+      const query={_id: new ObjectId(id)}
+      const result= await storiesCollection.deleteOne(query);
+      res.send(result)
+    })
+    
 
     app.get('/bookings',async(req,res)=>{
       const email=req.query.email;
@@ -216,6 +237,8 @@ async function run() {
       const result = await bookingsCollection.updateOne(query, updateDoc);
       res.send(result);
   });
+
+ 
 
     app.delete('/bookings/:id',async (req,res)=>{
       const id=req.params.id;
