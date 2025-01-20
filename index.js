@@ -100,7 +100,7 @@ async function run() {
   });
   
   // Update booking status
-  app.patch('/updateTourStatus/:id', async (req, res) => {
+  app.patch('/updateTourStatus/:id',verifyToken, async (req, res) => {
       const { id } = req.params;
       const { status } = req.body;
   
@@ -125,7 +125,7 @@ async function run() {
       }
   });
 
-    app.get("/users", verifyToken, verifyAdmin, async (req, res) => {
+    app.get("/users", verifyToken,  async (req, res) => {
       const { search = "", role = "" } = req.query;
 
       try {
@@ -152,7 +152,7 @@ async function run() {
       }
     });
 
-    app.get("/admin/stats", async (req, res) => {
+    app.get("/admin/stats", verifyToken,verifyAdmin, async (req, res) => {
       try {
         const [
           totalPayment,
@@ -222,7 +222,7 @@ async function run() {
       res.send({ guide });
     });
 
-    app.post("/users", async (req, res) => {
+    app.post("/users",verifyToken, async (req, res) => {
       const user = req.body;
       const query = { email: user.email };
       const existingUser = await userCollection.findOne(query);
@@ -233,7 +233,7 @@ async function run() {
       res.send(result);
     });
 
-    app.delete("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
+    app.delete("/users/:id", verifyToken,  async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await userCollection.deleteOne(query);
@@ -300,6 +300,12 @@ async function run() {
 
     app.get("/tour-guides", async (req, res) => {
       const result = await guideCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.post("/tour-guides", async (req, res) => {
+      const item = req.body;
+      const result = await guideCollection.insertOne(item);
       res.send(result);
     });
 
@@ -376,10 +382,7 @@ async function run() {
       }
   
 
-      // const id = req.params.id;
-      // const query = { _id: new ObjectId(id) };
-      // const result = await guideCollection.findOne(query);
-      // res.send(result);
+      
     });
     
 
@@ -521,10 +524,10 @@ async function run() {
     });
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
     // Ensures that the client will close when you finish/error
     //await client.close();
