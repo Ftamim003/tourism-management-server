@@ -37,6 +37,7 @@ async function run() {
     const bookingsCollection = client.db("TourismDB").collection("bookingInfo");
     const userCollection = client.db("TourismDB").collection("users");
     const paymentCollection = client.db("TourismDB").collection("payment");
+    const guideApplicationCollection = client.db("TourismDB").collection("guidesApplication");
 
     //JWT
 
@@ -78,11 +79,113 @@ async function run() {
       next();
     };
 
+
+    
+
     //Users
 
+    app.get('/assignedTours/:guideName', async (req, res) => {
+      const { guideName } = req.params;
+  
+      try {
+          const assignedTours = await bookingsCollection
+              .find({ guideName, status: { $ne: "Cancelled" } }) // Exclude cancelled tours
+              .toArray();
+  
+          res.send(assignedTours);
+      } catch (error) {
+          console.error("Error fetching assigned tours:", error);
+          res.status(500).send({ error: "Failed to fetch assigned tours" });
+      }
+  });
+  
+  // Update booking status
+  app.patch('/updateTourStatus/:id', async (req, res) => {
+      const { id } = req.params;
+      const { status } = req.body;
+  
+      if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ error: "Invalid tour ID" });
+      }
+  
+      try {
+          const updatedResult = await bookingsCollection.updateOne(
+              { _id: new ObjectId(id) },
+              { $set: { status } }
+          );
+  
+          if (updatedResult.modifiedCount === 0) {
+              return res.status(404).send({ error: "Tour not found or status already updated" });
+          }
+  
+          res.send({ message: "Tour status updated successfully" });
+      } catch (error) {
+          console.error("Error updating tour status:", error);
+          res.status(500).send({ error: "Failed to update tour status" });
+      }
+  });
+
     app.get("/users", verifyToken, verifyAdmin, async (req, res) => {
-      const result = await userCollection.find().toArray();
-      res.send(result);
+      const { search = "", role = "" } = req.query;
+
+      try {
+        const query = {};
+
+        // Add search condition
+        if (search) {
+          query.$or = [
+            { name: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+          ];
+        }
+
+        // Add role filter
+        if (role) {
+          query.role = role;
+        }
+
+        const users = await userCollection.find(query).toArray();
+        res.send(users);
+      } catch (error) {
+        console.error("Error fetching users:", error);
+        res.status(500).send({ message: "Failed to fetch users." });
+      }
+    });
+
+    app.get("/admin/stats", async (req, res) => {
+      try {
+        const [
+          totalPayment,
+          totalTourGuides,
+          totalPackages,
+          totalClients,
+          totalStories,
+        ] = await Promise.all([
+          // Sum all payment amounts in the bookingsCollection
+          bookingsCollection
+            .aggregate([{ $group: { _id: null, total: { $sum: "$price" } } }])
+            .toArray(),
+          // Count all tour guides in the tourGuides collection
+          guideCollection.countDocuments(),
+          // Count all packages in the tourPackages collection
+          packagesCollection.countDocuments(),
+          // Count all clients (users with the role 'tourist') in the users collection
+          userCollection.countDocuments({ role: "user" }),
+          // Count all stories in the touristStories collection
+          storiesCollection.countDocuments(),
+        ]);
+
+        res.send({
+          totalPayment: totalPayment[0]?.total || 0,
+          totalTourGuides,
+          totalPackages,
+          totalClients,
+          totalStories,
+        });
+      } catch (error) {
+        console.error("Error fetching stats:", error);
+        res.status(500).send({ error: "Failed to fetch stats" });
+      }
     });
 
     app.get("/users/admin/:email", verifyToken, async (req, res) => {
@@ -100,6 +203,23 @@ async function run() {
         admin = user?.role === "admin";
       }
       res.send({ admin });
+    });
+
+    app.get("/users/guide/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+
+      let guide = false;
+      if (user) {
+        guide = user?.role === "guide";
+      }
+      res.send({ guide });
     });
 
     app.post("/users", async (req, res) => {
@@ -120,6 +240,29 @@ async function run() {
       res.send(result);
     });
 
+    app.put("/update-profile/:email", async (req, res) => {
+      const { email } = req.params;
+      const { name, photo } = req.body;
+
+      try {
+        const result = await userCollection.updateOne(
+          { email: email },
+          { $set: { name: name, photoURL: photo } }
+        );
+
+        if (result.modifiedCount > 0) {
+          res.send({ success: true, message: "Profile updated successfully." });
+        } else {
+          res.status(404).send({ success: false, message: "User not found." });
+        }
+      } catch (error) {
+        console.error("Error updating profile:", error);
+        res
+          .status(500)
+          .send({ success: false, message: "Failed to update profile." });
+      }
+    });
+
     app.patch(
       "/users/admin/:id",
       verifyToken,
@@ -136,6 +279,22 @@ async function run() {
         res.send(result);
       }
     );
+
+    app.patch("/users/role", async (req, res) => {
+      const { email, role } = req.body;
+      const filter = { email: email };
+      const updatedDoc = {
+        $set: { role: role },
+      };
+
+      try {
+        const result = await userCollection.updateOne(filter, updatedDoc);
+        res.send(result);
+      } catch (error) {
+        console.error("Error updating user role:", error);
+        res.status(500).send({ message: "Failed to update user role." });
+      }
+    });
 
     //tours
 
@@ -169,6 +328,61 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/guideApplication", async (req, res) => {
+      const applications = await guideApplicationCollection.find().toArray();
+      res.send(applications);
+    });
+
+    app.post("/guideApplication", async (req, res) => {
+      const item = req.body;
+      const result = await guideApplicationCollection.insertOne(item);
+      res.send(result);
+    });
+
+    app.delete("/guideApplication", async (req, res) => {
+      const { email } = req.body; // Receive email from the request body
+      const filter = { email: email }; // Use email to identify the application
+
+      try {
+        const result = await guideApplicationCollection.deleteOne(filter);
+        res.send(result);
+      } catch (error) {
+        console.error("Error deleting application:", error);
+        res.status(500).send({ message: "Failed to delete application." });
+      }
+    });
+
+    app.get('/tourGuide/:id', async (req, res) => {
+      const { id } = req.params;
+  
+      if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ error: "Invalid guide ID" });
+      }
+  
+      try {
+          const guide = await guideCollection.findOne({ _id: new ObjectId(id) });
+  
+          if (!guide) {
+              return res.status(404).send({ error: "Tour guide not found" });
+          }
+  
+          // Assuming stories are stored in a `storiesCollection`
+          const stories = await storiesCollection.find({ guideId: id }).toArray();
+  
+          res.send({ guide, stories });
+      } catch (error) {
+          console.error("Error fetching tour guide details:", error);
+          res.status(500).send({ error: "Failed to fetch tour guide details" });
+      }
+  
+
+      // const id = req.params.id;
+      // const query = { _id: new ObjectId(id) };
+      // const result = await guideCollection.findOne(query);
+      // res.send(result);
+    });
+    
+
     app.get("/random-guides", async (req, res) => {
       const result = await guideCollection
         .aggregate([{ $sample: { size: 6 } }])
@@ -197,10 +411,10 @@ async function run() {
       res.send(result);
     });
 
-    // app.get('/stories', async (req, res) => {
-    //     const result = await storiesCollection.find().toArray();
-    //     res.send(result);
-    // });
+    app.get("/allStories", async (req, res) => {
+      const result = await storiesCollection.find().toArray();
+      res.send(result);
+    });
 
     app.post("/stories", async (req, res) => {
       const story = req.body;
