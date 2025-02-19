@@ -26,7 +26,7 @@ async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
     //await client.connect();
-
+    const eventRegistrationCollection = client.db("TourismDB").collection("eventRegistrations");
     const guideCollection = client.db("TourismDB").collection("tourGuides");
     const packagesCollection = client
       .db("TourismDB")
@@ -499,6 +499,29 @@ async function run() {
       const result = await bookingsCollection.deleteOne(query);
       res.send(result);
     });
+
+
+    // Store Event Registration
+    app.post('/event-registrations', async (req, res) => {
+      try {
+          const { name, email, contact } = req.body;
+          if (!name || !email || !contact) {
+              return res.status(400).json({ error: "All fields are required!" });
+          }
+          // Save the registration to the database (assuming MongoDB)
+          const newRegistration = { name, email, contact };
+          const result = await eventRegistrationCollection.insertOne(newRegistration);
+          res.status(201).json(result);
+      } catch (error) {
+          res.status(500).json({ error: "Internal server error" });
+      }
+  });
+  
+
+
+
+
+
 
     //Payment Related
     app.post("/create-payment-intent", async (req, res) => {
